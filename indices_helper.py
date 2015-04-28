@@ -327,13 +327,13 @@ def extractFields(profs, percentiles, cushon):
 
     prefixes = ['mu', 'sb', 'ml']
     prefix_descriptions = ['Most Unstable', 'Surface Based', '100 mb Mean Layer']
-    pcl_att = ['bplus', 'b3km', 'bminus', 'lfchght', 'lclhght', 'elhght', 'bmin', 'bminpres', 'cap', 'cappres', 'tmpc', 'dwpc', 'pres']
-    att_name = ['cape', 'cape03', 'cin', 'lfchght', 'lclhght', 'elhght', 'bmin', 'bminpres', 'cap', 'cappres', 'lpltmpc', 'lpldwpc', 'lplpres']
+    pcl_att = ['bplus', 'b3km', 'bminus', 'li5', 'lfchght', 'lclhght', 'elhght', 'bmin', 'bminpres', 'cap', 'cappres', 'tmpc', 'dwpc', 'pres']
+    att_name = ['cape', 'cape03', 'cin', 'li5', 'lfchght', 'lclhght', 'elhght', 'bmin', 'bminpres', 'cap', 'cappres', 'lpltmpc', 'lpldwpc', 'lplpres']
     descriptions = ['Convective Available Potential Energy', "0-3 km Convective Available Potential Energy", "Convective Inhibition",\
-                   'Level of Free Convection Height', "Lifted Condensation Level Height", "Equilibrium Level", "Buoyancy Minimum Value", "Buoyancy Minimum Pressure", \
+                   '500 mb Lifted Index', 'Level of Free Convection Height', "Lifted Condensation Level Height", "Equilibrium Level", "Buoyancy Minimum Value", "Buoyancy Minimum Pressure", \
                    'Cap Strength', "Pressure at Maximum Cap Strength", "Lifted Parcel Level Temperature", "Lifted Parcel Level Dewpoint",\
                    "Lifted Parcel Level Pressure"]
-    units = ['J/kg', 'J/kg', 'J/kg', 'meters AGL', 'meters AGL', 'meters AGL', 'C', 'mb', 'C', 'mb', 'C', 'C', 'mb']
+    units = ['J/kg', 'J/kg', 'J/kg', 'C', 'meters AGL', 'meters AGL', 'meters AGL', 'C', 'mb', 'C', 'mb', 'C', 'C', 'mb']
 
     var_details = {}
 
