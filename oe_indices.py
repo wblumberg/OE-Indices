@@ -32,24 +32,25 @@ import sharppy
     because it may need to be appended to (for example if this script is running in real-time.
 
 '''
-flag = sys.argv[1]
-fn = sys.argv[2]
-name = fn.replace('aerioe1turn', 'aerioeidx1blum')
+#flag = sys.argv[1]
+fn = sys.argv[1]
+out = sys.argv[2]
+name = fn.split('/')[-1].replace('aerioe1turn', 'aerioeidx1blum')
 name = name.replace('c1', 'c2')
-
+name = out + '/' + name
 d = Dataset(fn)
 bt = d.variables['base_time'][:]
 to = d.variables['time_offset'][:]
 
-existing_file = glob.glob(name)
-if len(existing_file) == 1 and flag == '-a':
-    temporary = Dataset(existing_file[0])
-    temp_bt = temporary.variables['base_time'][:] + temporary.variables['time_offset'][:]
-    beg_idx = len(to) - len(temp_bt)
-    end_idx = len(to)
-elif flag == '-w':
-    beg_idx = 0
-    end_idx = len(to)
+#existing_file = glob.glob(name)
+#if len(existing_file) == 1 and flag == '-a':
+#    temporary = Dataset(existing_file[0])
+#    temp_bt = temporary.variables['base_time'][:] + temporary.variables['time_offset'][:]
+#    beg_idx = len(to) - len(temp_bt)
+#    end_idx = len(to)
+#elif flag == '-w':
+beg_idx = 0
+end_idx = len(to)
 
 height = d.variables['height'][:]
 pres = d.variables['pressure'][beg_idx:end_idx]
@@ -62,10 +63,10 @@ num_perts = 700 # The ideal number of profiles to compute the index percentiles
 cush = 600 # The number of profiles where indices MUST be computed from (allows for crashing)
 ideb, details = sti.makeIndicesErrors(Xop, Sop, height, pres, num_perts, cush, converged_flag)
 
-if flag == '-w' and len(glob.glob(name)) != 0:
-    os.system('rm ' + name)
-else:
-    print "Appending to the file."
+#if flag == '-w' and len(glob.glob(name)) != 0:
+#    os.system('rm ' + name)
+#else:
+#    print "Appending to the file."
 
 out = Dataset(name, 'w', format='NETCDF3_CLASSIC')
 

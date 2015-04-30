@@ -12,10 +12,10 @@ import time
 from datetime import datetime
 import pandas as pd
 
-from sharppy.sharptab.profile import Profile
+from sharppy.sharptab.profile import BasicProfile
 from sharppy.sharptab import params, interp
 
-class AERIProfile(Profile):
+class AERIProfile(BasicProfile):
     '''
     The AERI custom data class using the SHARPPy Profile framework.
     
@@ -243,14 +243,13 @@ def makeIndicies(temp, dwpt, pres, height, cushon, parallel=False):
 
         results = []
         for i in range(len(temp)):
-            prof = AERIProfile(pres=pres[i], hght=height, temp=temp[i], dwpt=dwpt[i], wdir=missing, wspd=missing)
+            prof = makeProf(temp[i], dwpt[i], pres[i], height)
             #lts = lowerTropStab(prof, 850.)
-            #results.append(prof)
+            results.append(prof)
 
     results = np.asarray(results, dtype=object)
     good_idx = np.where(results != -9999)[0]
     results = results[good_idx]
-
     indices, details = extractFields(results, (25,50,75), cushon)
 
     return indices, details
@@ -323,6 +322,7 @@ def extractFields(profs, percentiles, cushon):
 
     indices_dictionary = {}
 
+    print "Extracting indices."
     parcels = ['mupcl', 'sfcpcl', 'mlpcl']
 
     prefixes = ['mu', 'sb', 'ml']
@@ -373,7 +373,7 @@ def extractFields(profs, percentiles, cushon):
             indices_dictionary[dic] = np.percentile(filtered_indices[~filtered_indices.mask], percentiles)
         else:
             indices_dictionary[dic] = [-9999,-9999,-9999]
-    print datetime.now() - dt
+    print "Time to sort indices:", datetime.now() - dt
 
     return indices_dictionary, var_details
     
