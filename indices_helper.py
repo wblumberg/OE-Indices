@@ -15,6 +15,8 @@ import pandas as pd
 from sharppy.sharptab.profile import BasicProfile
 from sharppy.sharptab import params, interp
 
+no_process = 8
+
 class AERIProfile(BasicProfile):
     '''
     The AERI custom data class using the SHARPPy Profile framework.
@@ -224,7 +226,7 @@ def makeIndicies(temp, dwpt, pres, height, cushon, parallel=False):
     missing = np.ones(len(temp[0])) # This is the missing profile to be passed to the wind arrays in the Profile object
     
     if parallel == True:
-        child = subprocess.Popen('ipcluster start -n 6', shell=True)
+        child = subprocess.Popen('ipcluster start -n ' + str(no_process), shell=True)
         #time.sleep(10)
         height = np.tile([height],(len(temp),1))
         dt = datetime.now()
