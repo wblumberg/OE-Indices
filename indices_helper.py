@@ -246,7 +246,6 @@ def makeIndicies(temp, dwpt, pres, height, cushon, parallel=False):
             prof = makeProf(temp[i], dwpt[i], pres[i], height)
             #lts = lowerTropStab(prof, 850.)
             results.append(prof)
-
     results = np.asarray(results, dtype=object)
     good_idx = np.where(results != -9999)[0]
     results = results[good_idx]
@@ -368,7 +367,7 @@ def extractFields(profs, percentiles, cushon):
     dt = datetime.now()
     for dic in indices_dictionary.keys():
         filtered_indices = np.ma.masked_invalid(indices_dictionary[dic])
-        if len(filtered_indices) > cushon:
+        if len(filtered_indices) > cushon and len(filtered_indices[~filtered_indices.mask]) != 0:
             #indices_dictionary[dic] = np.nanpercentile(filtered_indices, percentiles)
             indices_dictionary[dic] = np.percentile(filtered_indices[~filtered_indices.mask], percentiles)
         else:
@@ -380,9 +379,12 @@ def extractFields(profs, percentiles, cushon):
 
 def makeProf(temp, dwpt, pres, height):
     missing = np.ones((len(height)))
+    #prof = AERIProfile(pres=pres, hght=height, tmpc=temp, dwpc=dwpt, wdir=missing, wspd=missing)
     try:
         prof = AERIProfile(pres=pres, hght=height, tmpc=temp, dwpc=dwpt, wdir=missing, wspd=missing)
-    except:
+    except Exception,e:
+        print e
+    #    prof = e
         prof = -9999
 
     return prof
