@@ -8,6 +8,8 @@ import indices_helper as sti
 import sys
 from datetime import datetime
 import sharppy
+import warnings
+warnings.filterwarnings("ignore")
 
 '''
     oe_indices.py
@@ -85,7 +87,7 @@ def run(fn, out):
     out.SHARPpy_version = sharppy.__version__
 
     out.createDimension('time', len(ideb))
-    out.createDimension('percentiles', 3)
+    out.createDimension('samples', num_perts)
     out.createDimension('single', 1)
 
     var = out.createVariable('base_time', 'f4', ('single',))
@@ -98,21 +100,26 @@ def run(fn, out):
     var.long_name = d.variables['time_offset'].long_name
     var.units = str(d.variables['time_offset'].units)
 
-    var = out.createVariable('percentiles', 'f4', ('percentiles', ))
-    var[:] = [25,50,75]
-    var.long_name = "Percentiles for the errorbars"
-    var.units = "%"
+    #var = out.createVariable('percentiles', 'f4', ('percentiles', ))
+    #var[:] = [25,50,75]
+    #var.long_name = "Percentiles for the errorbars"
+    #var.units = "%"
 
 # loop through the indices and add them to the netCDF file
     for var_name in np.sort(details.keys()):
         longname = details[var_name][0]
         unit = details[var_name][1]
-        var = out.createVariable(var_name, 'f4', ('time', 'percentiles',))
+        var = out.createVariable(var_name, 'f4', ('time', 'samples',))
         var.long_name = longname
         var.units = unit
-        data = np.empty((len(ideb),3))
+        data = np.empty((len(ideb),num_perts))
+        print longname
         for i in xrange(len(ideb)):
-            data[i,:] = ideb[i][var_name]
+            data_subset = ideb[i][var_name]
+            print len(data_subset)
+            data_subset = np.concatenate((data_subset, np.ones(num_perts - len(data_subset))*-9999))
+            print data_subset
+            data[i,:] = data_subset
         var[:] = data
 
     var = out.createVariable('hatchOpen', 'i4', ('time', ))

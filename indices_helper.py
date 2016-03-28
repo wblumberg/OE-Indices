@@ -6,16 +6,18 @@ from sharppy.sharptab import interp, profile, params, thermo
 import numpy as np
 import scipy
 import scipy.stats
-from IPython.parallel import Client
+#from IPython.parallel import Client
+import multiprocessing
 import subprocess
 import time
 from datetime import datetime
 import pandas as pd
-
+import indices_helper as sti
+        
 from sharppy.sharptab.profile import BasicProfile
 from sharppy.sharptab import params, interp
 
-no_process = 8
+no_process = 30
 
 class AERIProfile(BasicProfile):
     '''
@@ -226,19 +228,28 @@ def makeIndicies(temp, dwpt, pres, height, cushon, parallel=False):
     missing = np.ones(len(temp[0])) # This is the missing profile to be passed to the wind arrays in the Profile object
     
     if parallel == True:
-        child = subprocess.Popen('ipcluster start -n ' + str(no_process), shell=True)
+        #child = subprocess.Popen('ipcluster start -n ' + str(no_process), shell=True)
         #time.sleep(10)
         height = np.tile([height],(len(temp),1))
         dt = datetime.now()
-        cli = Client()
-        dview = cli[:]
-        lbview = cli.load_balanced_view()
-        lbview.block = True
-        with dview.sync_imports():
-            from sharppy.sharptab import interp, profile, params, thermo
-            import indices_helper as sti
-
-        results = lbview.map(makeProf, temp, dwpt, pres, height) # Returns a list of AERIProfile objects
+        #cli = Client()
+        #dview = cli[:]
+        #lbview = cli.load_balanced_view()
+        #lbview.block = True
+        #with dview.sync_imports():
+        #    from sharppy.sharptab import interp, profile, params, thermo
+        #    import indices_helper as sti
+        pool = multiprocessing.Pool(no_process)
+        #print temp[0], dwpt[0], pres[0], height[0]
+        profiles = []
+        for i in range(len(temp)):
+            profiles.append([temp[i], dwpt[i], pres[i], height[i]])
+        profiles = np.asarray(profiles)
+        #print np.asarray(profiles).shape
+        #stop
+        #profs = np.empty((len(temp),  
+        results = pool.map(makeProf, profiles)#[temp, dwpt, pres, height])
+        #results = lbview.map(makeProf, temp, dwpt, pres, height) # Returns a list of AERIProfile objects
         print datetime.now() - dt
     else:       
         from sharppy.sharptab import interp, profile, params, thermo
@@ -371,19 +382,24 @@ def extractFields(profs, percentiles, cushon):
         filtered_indices = np.ma.masked_invalid(indices_dictionary[dic])
         if len(filtered_indices) > cushon and len(filtered_indices[~filtered_indices.mask]) != 0:
             #indices_dictionary[dic] = np.nanpercentile(filtered_indices, percentiles)
-            indices_dictionary[dic] = np.percentile(filtered_indices[~filtered_indices.mask], percentiles)
+            #indices_dictionary[dic] = np.percentile(filtered_indices[~filtered_indices.mask], percentiles)
+            indices_dictionary[dic] = filtered_indices[~filtered_indices.mask]
         else:
             indices_dictionary[dic] = [-9999,-9999,-9999]
+            indices_dictionary[dic] = np.ones(700)*-9999 
+        #print dic
+        #print indices_dictionary[dic]
     print "Time to sort indices:", datetime.now() - dt
-
+    
     return indices_dictionary, var_details
     
 
-def makeProf(temp, dwpt, pres, height):
-    missing = np.ones((len(height)))
+def makeProf(data):#temp, dwpt, pres, height):
+    missing = np.ones((len(data[0])))
     #prof = AERIProfile(pres=pres, hght=height, tmpc=temp, dwpc=dwpt, wdir=missing, wspd=missing)
+    #print data[3]
     try:
-        prof = AERIProfile(pres=pres, hght=height, tmpc=temp, dwpc=dwpt, wdir=missing, wspd=missing)
+        prof = AERIProfile(pres=data[2], hght=data[3], tmpc=data[0], dwpc=data[1], wdir=missing, wspd=missing)
     except Exception,e:
         print e
     #    prof = e
