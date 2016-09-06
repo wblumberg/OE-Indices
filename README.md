@@ -4,6 +4,8 @@ Package to calculate the uncertainty of convection indices using Monte Carlo sam
 These two scripts interact with the SHARPpy libraries to generate
 convection indices with errorbars from OE-generated thermodynamic profiles.
 
+The branch named "samples" will actually output the entire distribution of convection indices.
+
 Currently these scripts do not support real-time use.  They will not append
 to the files created.  This will be done before PECAN, preferibly refined during the
 testing.
