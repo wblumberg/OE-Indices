@@ -15,7 +15,7 @@ import pandas as pd
 from sharppy.sharptab.profile import BasicProfile
 from sharppy.sharptab import params, interp
 
-no_process = 8
+no_process = 4
 
 class AERIProfile(BasicProfile):
     '''
@@ -350,6 +350,29 @@ def extractFields(profs, percentiles, cushon):
                     indices_dictionary[prefix + name] = [getattr(pcl, att)]
                 var_details[prefix + name] = [prefix_desc + ' ' + desc, unit]
 
+
+    # Add all parcel information to the dictionaries.
+    for i in xrange(len(profs)):
+        prof = profs[i]
+        for p, prefix, prefix_desc in zip(parcels, prefixes, prefix_descriptions):
+            pcl = getattr(prof, p)
+            for att, name, desc, unit in zip(pcl_att, att_name, descriptions, units):
+                key = prefix+name
+                if 'pres' in name:
+                    val = np.float(interp.hght(prof, getattr(pcl, att)))
+                    key = prefix+name
+                    key = key.replace('pres','hght')
+                    u = 'm AGL'
+                    d = desc.replace('Pressure', 'Height')
+                else:
+                    val = getattr(pcl, att)
+                    d = desc
+                    u = unit
+                try:
+                    indices_dictionary[key] = list(np.concatenate((indices_dictionary[key],[val])))
+                except Exception,e:
+                    indices_dictionary[key] = [val]
+                var_details[key] = [prefix_desc + ' ' + d, u]
 
     var_names = ['k_idx', 'pwat', 'lapserate_1km', 'lapserate_2km', 'lapserate_3km', 'convT', 'maxT', 'totals_totals',\
                  'ppbl_top']
