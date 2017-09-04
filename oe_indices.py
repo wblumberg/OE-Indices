@@ -42,6 +42,7 @@ def run(fn, out):
     name = fn.split('/')[-1].replace('aerioe1turn', 'aerioeidx1blum')
     name = name.replace('c1', 'c2')
     name = out + '/' + name
+    print fn
     d = Dataset(fn)
     bt = d.variables['base_time'][:]
     to = d.variables['time_offset'][:]
@@ -56,6 +57,7 @@ def run(fn, out):
     beg_idx = 0
     end_idx = len(to)
 
+    print "Data length:", beg_idx
     height = d.variables['height'][:]
     pres = d.variables['pressure'][beg_idx:end_idx]
     Xop = d.variables['Xop'][beg_idx:end_idx]
@@ -145,4 +147,5 @@ def run(fn, out):
 if __name__ == '__main__':
     fn = sys.argv[1]
     out = sys.argv[2]
+    print fn, out
     run(fn, out)

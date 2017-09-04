@@ -6,14 +6,18 @@ from sharppy.sharptab import interp, profile, params, thermo
 import numpy as np
 import scipy
 import scipy.stats
-from IPython.parallel import Client
+import multiprocessing
 import subprocess
 import time
 from datetime import datetime
 import pandas as pd
+import indices_helper as sti
+import tqdm
 
+import sharppy.sharptab.params as params
+import sharppy.sharptab.interp as interp
 from sharppy.sharptab.profile import BasicProfile
-from sharppy.sharptab import params, interp
+
 
 no_process = 4
 
@@ -224,22 +228,21 @@ def makeIndicies(temp, dwpt, pres, height, cushon, parallel=False):
         input 2D arrays.
     """
     missing = np.ones(len(temp[0])) # This is the missing profile to be passed to the wind arrays in the Profile object
-    
-    if parallel == True:
-        child = subprocess.Popen('ipcluster start -n ' + str(no_process), shell=True)
-        #time.sleep(10)
-        height = np.tile([height],(len(temp),1))
-        dt = datetime.now()
-        cli = Client()
-        dview = cli[:]
-        lbview = cli.load_balanced_view()
-        lbview.block = True
-        with dview.sync_imports():
-            from sharppy.sharptab import interp, profile, params, thermo
-            import indices_helper as sti
 
-        results = lbview.map(makeProf, temp, dwpt, pres, height) # Returns a list of AERIProfile objects
-        print datetime.now() - dt
+    if parallel == True:
+        dt = datetime.now()
+        print "\tBeginning the parallelized SHARPpy Profile object creation..."
+        pool = multiprocessing.Pool(no_process)
+        profiles = []
+        for i in range(len(temp)):
+            profiles.append([temp[i], dwpt[i], pres[i], height])
+        profiles = np.asarray(profiles)
+        print profiles
+
+        results = []
+        for r in tqdm.tqdm(pool.imap_unordered(makeProf, profiles), total=len(profiles)):
+            results.append(r)
+        print "Time to do MC:", datetime.now() - dt
     else:       
         from sharppy.sharptab import interp, profile, params, thermo
 
@@ -402,7 +405,11 @@ def extractFields(profs, percentiles, cushon):
     return indices_dictionary, var_details
     
 
-def makeProf(temp, dwpt, pres, height):
+def makeProf(profile):
+    pres = profile[2]
+    temp = profile[0]
+    dwpt = profile[1]
+    height = profile[3]
     missing = np.ones((len(height)))
     #prof = AERIProfile(pres=pres, hght=height, tmpc=temp, dwpc=dwpt, wdir=missing, wspd=missing)
     try:
