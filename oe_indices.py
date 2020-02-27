@@ -1,14 +1,16 @@
-print 'python oe_indices [-a or -w] <input_file>'
+print('python oe_indices [-a or -w] <input_file>')
 
 import sys
-sys.path.append('/home/greg.blumberg/python_pkgs/')
-from pylab import *
-from netCDF4 import Dataset, MFDataset
+sys.path.append('/home/wblumberg/.conda/envs/local/site-packages/')
+#sys.path.append('/home/greg.blumberg/python_pkgs/')
+#from pylab import *
+from netCDF4 import Dataset, MFDataset, num2date
 import indices_helper as sti
 import sys
 from datetime import datetime
 import sharppy
 import warnings
+import numpy as np
 warnings.filterwarnings("ignore")
 
 '''
@@ -48,6 +50,8 @@ def run(fn, out):
     bt = d.variables['base_time'][:]
     to = d.variables['time_offset'][:]
 
+    retrieval_times = num2date(bt+to, 'seconds since 1970-01-01 00:00') 
+
     #existing_file = glob.glob(name)
     #if len(existing_file) == 1 and flag == '-a':
     #    temporary = Dataset(existing_file[0])
@@ -58,6 +62,7 @@ def run(fn, out):
     beg_idx = 0
     end_idx = len(to)
 
+    to = to[beg_idx:end_idx]
     height = d.variables['height'][:]
     pres = d.variables['pressure'][beg_idx:end_idx]
     Xop = d.variables['Xop'][beg_idx:end_idx]
@@ -65,15 +70,7 @@ def run(fn, out):
     converged_flag = d.variables['converged_flag'][beg_idx:end_idx]
     height = height * 1000.
 
-    num_perts = 700 # The ideal number of profiles to compute the index percentiles
-    cush = 600 # The number of profiles where indices MUST be computed from (allows for crashing)
-    ideb, details = sti.makeIndicesErrors(Xop, Sop, height, pres, num_perts, cush, converged_flag)
-
-    #if flag == '-w' and len(glob.glob(name)) != 0:
-    #    os.system('rm ' + name)
-    #else:
-    #    print "Appending to the file."
-
+    print("Generating output file:", name)
     out = Dataset(name, 'w', format='NETCDF3_CLASSIC')
 
     out.Date_created = datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:%S")
@@ -100,28 +97,7 @@ def run(fn, out):
     var.long_name = d.variables['time_offset'].long_name
     var.units = str(d.variables['time_offset'].units)
 
-    #var = out.createVariable('percentiles', 'f4', ('percentiles', ))
-    #var[:] = [25,50,75]
-    #var.long_name = "Percentiles for the errorbars"
-    #var.units = "%"
-
-# loop through the indices and add them to the netCDF file
-    for var_name in np.sort(details.keys()):
-        longname = details[var_name][0]
-        unit = details[var_name][1]
-        var = out.createVariable(var_name, 'f4', ('time', 'samples',))
-        var.long_name = longname
-        var.units = unit
-        data = np.empty((len(ideb),num_perts))
-        print longname
-        for i in xrange(len(ideb)):
-            data_subset = ideb[i][var_name]
-            print len(data_subset)
-            data_subset = np.concatenate((data_subset, np.ones(num_perts - len(data_subset))*-9999))
-            print data_subset
-            data[i,:] = data_subset
-        var[:] = data
-
+    print("Copying over AERIoe QC flags to the output file...")
     var = out.createVariable('hatchOpen', 'i4', ('time', ))
     var[:] = d.variables['hatchOpen'][beg_idx:end_idx]
     var.long_name = d.variables['hatchOpen'].long_name
@@ -132,10 +108,20 @@ def run(fn, out):
     var.long_name = d.variables['converged_flag'].long_name
     var.units = str(d.variables['converged_flag'].units)
 
-    var = out.createVariable('rms', 'f4', ('time', ))
-    var[:] = d.variables['rms'][beg_idx:end_idx]
-    var.long_name = d.variables['rms'].long_name
-    var.units = str(d.variables['rms'].units)
+    var = out.createVariable('rmsr', 'f4', ('time', ))
+    var[:] = d.variables['rmsr'][beg_idx:end_idx]
+    var.long_name = d.variables['rmsr'].long_name
+    var.units = str(d.variables['rmsr'].units)
+
+    var = out.createVariable('rmsa', 'f4', ('time', ))
+    var[:] = d.variables['rmsa'][beg_idx:end_idx]
+    var.long_name = d.variables['rmsa'].long_name
+    var.units = str(d.variables['rmsa'].units)
+
+    var = out.createVariable('cbh', 'f4', ('time', ))
+    var[:] = d.variables['cbh'][beg_idx:end_idx]
+    var.long_name = d.variables['cbh'].long_name
+    var.units = str(d.variables['cbh'].units)
 
     var = out.createVariable('lwp', 'f4', ('time', ))
     var[:] = d.variables['lwp'][beg_idx:end_idx]
@@ -147,7 +133,48 @@ def run(fn, out):
     var.long_name = d.variables['qc_flag'].long_name
     var.units = str(d.variables['qc_flag'].units)
 
-    out.close()
+    num_perts = 500 # The ideal number of profiles to compute the index percentiles
+    cush = 100 # The number of profiles where indices MUST be computed from (allows for crashing)
+ 
+    print("-----------------------------------------------------------")
+    print("Starting to generate the errors for the convective indices.")
+    print("-----------------------------------------------------------")
+    for i in range(len(Xop)): # Loop over each retrieval
+        print("Starting with " + retrieval_times[i].strftime("%Y-%m-%d %H:%M:%S UTC") + " Retrieval No. " + str(i) + "/" + str(len(Xop)))
+        ideb, details = sti.makeIndicesErrors(Xop[i], Sop[i], height, pres[i], num_perts, cush, converged_flag)
+        print("Completed Monte Carlo sampling of the convective indices.  Saving to file...")
+        for var_name in np.sort(list(details.keys())): # Loop over all of the index names
+            if i == 0: # if we're working on the first retrieval, make the netCDF variables
+                # Obtain the index description and units
+                longname = details[var_name][0]
+                unit = details[var_name][1]
+                var = out.createVariable(var_name, 'f4', ('time', 'samples',))
+                var.long_name = longname
+                var.units = unit
+            else:
+                var = out.variables[var_name]
+            data = np.empty((len(ideb),num_perts))
+            for i in range(len(ideb)):
+                data_subset = ideb[i][var_name]
+                if len(data_subset) > num_perts:
+                    data_subset = data_subset[:num_perts]
+                data_subset = np.concatenate((data_subset, np.ones(num_perts - len(data_subset))*-9999))
+            data[i,:] = data_subset
+        var[i,:] = data
+        
+
+    #if flag == '-w' and len(glob.glob(name)) != 0:
+    #    os.system('rm ' + name)
+    #else:
+    #    print "Appending to the file."
+
+    #var = out.createVariable('percentiles', 'f4', ('percentiles', ))
+    #var[:] = [25,50,75]
+    #var.long_name = "Percentiles for the errorbars"
+    #var.units = "%"
+
+    # loop through the indices and add them to the netCDF file
+   out.close()
 
 if __name__ == '__main__':
     fn = sys.argv[1]
