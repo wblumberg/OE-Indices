@@ -39,6 +39,9 @@ warnings.filterwarnings("ignore")
 
 '''
  
+num_perts = 500 # The ideal number of profiles to compute the index percentiles
+cush = 100 # The number of profiles where indices MUST be computed from (allows for crashing)
+ 
 def run(fn, out):
     #flag = sys.argv[1]
     fn = sys.argv[1]
@@ -46,6 +49,8 @@ def run(fn, out):
     name = fn.split('/')[-1].replace('aerioe1turn', 'aerioeidx1blum')
     name = name.replace('c1', 'c2')
     name = out + '/' + name
+
+    print('Reading in input file: ' + fn)
     d = Dataset(fn)
     bt = d.variables['base_time'][:]
     to = d.variables['time_offset'][:]
@@ -70,7 +75,7 @@ def run(fn, out):
     converged_flag = d.variables['converged_flag'][beg_idx:end_idx]
     height = height * 1000.
 
-    print("Generating output file:", name)
+    print("Setting up output file:", name)
     out = Dataset(name, 'w', format='NETCDF3_CLASSIC')
 
     out.Date_created = datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:%S")
@@ -83,7 +88,7 @@ def run(fn, out):
     out.cushon = str(cush)
     out.SHARPpy_version = sharppy.__version__
 
-    out.createDimension('time', len(ideb))
+    out.createDimension('time', end_idx-beg_idx)
     out.createDimension('samples', num_perts)
     out.createDimension('single', 1)
 
@@ -133,14 +138,11 @@ def run(fn, out):
     var.long_name = d.variables['qc_flag'].long_name
     var.units = str(d.variables['qc_flag'].units)
 
-    num_perts = 500 # The ideal number of profiles to compute the index percentiles
-    cush = 100 # The number of profiles where indices MUST be computed from (allows for crashing)
- 
     print("-----------------------------------------------------------")
     print("Starting to generate the errors for the convective indices.")
     print("-----------------------------------------------------------")
     for i in range(len(Xop)): # Loop over each retrieval
-        print("Starting with " + retrieval_times[i].strftime("%Y-%m-%d %H:%M:%S UTC") + " Retrieval No. " + str(i) + "/" + str(len(Xop)))
+        print("*** Starting with " + retrieval_times[i].strftime("%Y-%m-%d %H:%M:%S UTC") + " Retrieval No. " + str(i) + "/" + str(len(Xop)) + " ***")
         ideb, details = sti.makeIndicesErrors(Xop[i], Sop[i], height, pres[i], num_perts, cush, converged_flag)
         print("Completed Monte Carlo sampling of the convective indices.  Saving to file...")
         for var_name in np.sort(list(details.keys())): # Loop over all of the index names
@@ -153,15 +155,13 @@ def run(fn, out):
                 var.units = unit
             else:
                 var = out.variables[var_name]
-            data = np.empty((len(ideb),num_perts))
-            for i in range(len(ideb)):
-                data_subset = ideb[i][var_name]
-                if len(data_subset) > num_perts:
-                    data_subset = data_subset[:num_perts]
-                data_subset = np.concatenate((data_subset, np.ones(num_perts - len(data_subset))*-9999))
-            data[i,:] = data_subset
-        var[i,:] = data
-        
+            data = np.empty(num_perts)
+            data_subset = ideb[var_name]
+            if len(data_subset) > num_perts:
+                data_subset = data_subset[:num_perts]
+            data_subset = np.concatenate((data_subset, np.ones(num_perts - len(data_subset))*-9999))
+            var[i,:] = data_subset
+        print("*** Completed convection index generation for Retrieval No. " + str(i) + '/' + str(len(Xop)) + " ***\n") 
 
     #if flag == '-w' and len(glob.glob(name)) != 0:
     #    os.system('rm ' + name)
@@ -174,9 +174,16 @@ def run(fn, out):
     #var.units = "%"
 
     # loop through the indices and add them to the netCDF file
-   out.close()
+    out.close()
 
 if __name__ == '__main__':
     fn = sys.argv[1]
     out = sys.argv[2]
+    print("------------------------------")
+    print("*****     OE-INDICES     *****")
+    print("------------------------------")
+    print("Author: WG Blumberg")
+    print("See Blumberg et al. 2017 JAMC")
+    print()
+
     run(fn, out)
