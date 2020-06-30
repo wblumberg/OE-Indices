@@ -1,4 +1,4 @@
-print 'python oe_indices [-a or -w] <input_file>'
+print 'python sonde_indices.py [-a or -w] <input_file>'
 
 import sys
 sys.path.append('/home/greg.blumberg/python_pkgs/')
@@ -12,14 +12,16 @@ import warnings
 warnings.filterwarnings("ignore")
 
 '''
-    oe_indices.py
+    sonde_indices.py
 
     AUTHOR: Greg Blumberg (OU/CIMMS)
 
-    This script takes in OE-retrievals of thermodynamic profiles from
-    either AERIoe or MWRoe and performs a.) Monte Carlo sampling of the retrievals
-    to generate approximately 500 retrievals, and then b.) uses the SHARPpy
-    libraries to perform convection index calculations on all 500 retrievals.
+    This script takes in ARM formatted radiosonde files and performs 
+        a.) Monte Carlo sampling of the retrievals
+        to generate approximately 500 retrievals
+        b.) uses the SHARPpy libraries to perform convection 
+        index calculations on all 500 retrievals.
+    
     After this the convection indices are sorted, the 25th, 50th, and 75th percentiles
     are pulled out for each index and then saved in a netCDF file.
 
@@ -27,7 +29,7 @@ warnings.filterwarnings("ignore")
     and IPython to perform the calculations in an efficient manner.
 
     To run this script, use this command:
-        python oe_indices.py [-a or -w] <input_file>
+        python sonde_indices.py [-a or -w] <input_file>
 
     where <input_file> is the path to the OE netCDF file and the flag -a means append to an existing file
     and the -w means overwrite any existing file.
@@ -36,39 +38,126 @@ warnings.filterwarnings("ignore")
     because it may need to be appended to (for example if this script is running in real-time.
 
 '''
+
+# WMO accuracy requirements
+# https://www.wmo.int/pages/prog/gcos/documents/gruanmanuals/CIMO/CIMO_Guide-7th_Edition-2008.pdf
+temp_sigma = 0.5 # C
+rh_sigma = 5 # %
+
+# RS-90 and RS-92 accuracy values (see ARM SONDE handbook)
+rand_sigma_rh = 2/2. # % RH (converts to 1-sigma)
+syst_sigma_rh = 3 # % RH
+rand_sigma_t = 0.15/2. #C (converts to 1-sigma)
+syst_sigma_t = 0.2 # C
+
+# RS80-H & RS80-A
+# 80-90 % RH 1-sigma 3 % RH
+# 40-60 % RH 1-sigma 3 % RH
+# 10-20 % RH 1-sigma 2 % RH
+# Couldn't determine the TEMP uncertanity for these values
  
+def rh2q(temp, pres, rh):
+    """
+    Inputs
+    ------
+    temp [K]
+    pres [Pa]
+    rh [fraction]
+    """
+    Rv = 461.
+    L = 2.453 * 10**6
+    es = 6.11 * np.exp((L/Rv)*((1./(273.15)) - (1./temp)))
+    e = rh * es
+    q = (0.622*e) / ((pres/100.) - e)
+    return q
+
+def q2rh(temp, pres, q):
+    q = q/1000. 
+    e = (q*(pres/100.))/(0.622 + q) 
+    Rv = 461.
+    L = 2.453 * 10**6
+    es = 6.11 * np.exp((L/Rv)*((1./(273.15)) - (1./temp)))
+    rh = e/es
+    return rh*100.
+
+
+
+def perturb_radiosonde(tdry, rh, pres, num_perts):
+    new_t = np.empty((num_perts,len(tdry)))
+    new_q = np.empty((num_perts,len(tdry)))  
+    for i in range(num_perts):
+        new_t[i,:] = tdry + (syst_sigma_t*np.random.normal(0, 1, 1)) + (rand_sigma_t*np.random.normal(0, 1, len(rh)))
+        rh_sample =  rh + (syst_sigma_rh*np.random.normal(0, 1, 1)) + (rand_sigma_rh*np.random.normal(0, 1, len(rh)))
+        idx = np.where(rh_sample < 0)[0]
+        rh_sample[idx] = 0.000001
+        idx = np.where(rh_sample > 100)[0]
+        rh_sample[idx] = 100 
+        new_q[i,:] = rh2q(new_t[i,:] + 273.15, 100*pres, rh_sample/100.)
+    
+    """
+    # OLD CODE
+    #for i in range(num_perts):                                                                                                 
+        new_t[i] = temp_sigma * np.random.normal(0, 1, len(tdry)) + tdry  
+        new_rh = rh_sigma * np.random.normal(0, 1, len(tdry)) + rh
+        idx = np.where(new_rh < 0)[0]
+        new_rh[idx] = 0
+        idx = np.where(new_rh > 100)[0]
+        new_rh[idx] = 100 
+        new_q[i] = rh2q(tdry+273.15, pres*100., new_rh/100.)
+    """
+    return new_t, 1000.*new_q
+
 def run(fn, out):
     #flag = sys.argv[1]
     fn = sys.argv[1]
     out = sys.argv[2]
-    name = fn.split('/')[-1].replace('aerioe1turn', 'aerioeidx1blum')
+    # Replace this for the radiosonde data formats
+    name = fn.split('/')[-1].replace('sonde', 'sondemcidx1blum')
     name = name.replace('c1', 'c2')
     name = out + '/' + name
+    stride = 1
     d = Dataset(fn)
     bt = d.variables['base_time'][:]
-    to = d.variables['time_offset'][:]
-
-    #existing_file = glob.glob(name)
-    #if len(existing_file) == 1 and flag == '-a':
-    #    temporary = Dataset(existing_file[0])
-    #    temp_bt = temporary.variables['base_time'][:] + temporary.variables['time_offset'][:]
-    #    beg_idx = len(to) - len(temp_bt)
-    #    end_idx = len(to)
-    #elif flag == '-w':
-    beg_idx = 0
-    end_idx = len(to)
-
-    height = d.variables['height'][:]
-    pres = d.variables['pressure'][beg_idx:end_idx]
-    Xop = d.variables['Xop'][beg_idx:end_idx]
-    Sop = d.variables['Sop'][beg_idx:end_idx]
-    converged_flag = d.variables['converged_flag'][beg_idx:end_idx]
+    to = d.variables['time_offset'][::stride]
+    height = d.variables['alt'][::stride]
+    pres = np.asarray([d.variables['pres'][::stride]])
+    
+    #q = d.variables['q'][::stride] 
+    tdry = d.variables['tdry'][::stride]
+    #if 'q' not in d.variables.keys():
+    try:
+        rh = d.variables['rh'][::stride]
+    except:
+        rh = q2rh(tdry+273.15, pres*100, q).squeeze()
+    #else:
+    #    q = d.variables['q'][:]
+    print rh
+    #print tdry.shape, q.shape, rh.shape
+    #print tdry, pres, rh
+    q = rh2q(tdry+273.15, 100.*pres[0], rh/100.)#d.variables['q'][:]
+    q = q * 1000.
+    print "QC check of profile."
+    #print np.max(height), np.min(height)
+    #print np.max(pres[0]), np.min(pres[0])
+    #print np.max(tdry), np.min(tdry)
+    #print np.max(rh), np.min(rh)
+    #print np.max(q), np.min(q)
+    #print height.shape, pres.shape, tdry.shape, q.shape
+    t_dist, q_dist = perturb_radiosonde(tdry, rh, pres, 10000)
+    Sop = np.asarray([np.cov(np.hstack((t_dist, q_dist)).T)])
+    Xop = np.asarray([np.concatenate((tdry,q))])
+    #print Xop.shape, Sop.shape
+    #print np.max(Sop), np.min(Sop)
+    #print np.sqrt(np.diag(Sop[0]))
+    #stop 
+    #converged_flag = d.variables['converged_flag'][beg_idx:end_idx]
+    converged_flag = [1]
     height = height * 1000.
 
     num_perts = 500 # The ideal number of profiles to compute the index percentiles
-    cush = 100 # The number of profiles where indices MUST be computed from (allows for crashing)
-    ideb, details = sti.makeIndicesErrors(Xop, Sop, height, pres, num_perts, cush, converged_flag)
-
+    cush = 200 # The number of profiles where indices MUST be computed from (allows for crashing)
+    
+    ideb, details = sti.makeIndicesErrors(Xop, Sop, height, pres, num_perts, cush, converged_flag, sonde=True)
     #if flag == '-w' and len(glob.glob(name)) != 0:
     #    os.system('rm ' + name)
     #else:
@@ -92,12 +181,12 @@ def run(fn, out):
 
     var = out.createVariable('base_time', 'f4', ('single',))
     var[:] = bt
-    var.long_name = d.variables['base_time'].long_name
+    var.long_name = 'beginning time'#d.variables['base_time'].long_name
     var.units = str(d.variables['base_time'].units)
 
     var = out.createVariable('time_offset', 'f4', ('time', ))
-    var[:] = to
-    var.long_name = d.variables['time_offset'].long_name
+    var[:] = [0]
+    var.long_name = 'time offset since base_time'
     var.units = str(d.variables['time_offset'].units)
 
     #var = out.createVariable('percentiles', 'f4', ('percentiles', ))
@@ -105,7 +194,7 @@ def run(fn, out):
     #var.long_name = "Percentiles for the errorbars"
     #var.units = "%"
 
-# loop through the indices and add them to the netCDF file
+    # loop through the indices and add them to the netCDF file
     for var_name in np.sort(details.keys()):
         longname = details[var_name][0]
         unit = details[var_name][1]
@@ -124,7 +213,7 @@ def run(fn, out):
             #print data_subset
             data[i,:] = data_subset
         var[:] = data
-
+    """
     var = out.createVariable('hatchOpen', 'i4', ('time', ))
     var[:] = d.variables['hatchOpen'][beg_idx:end_idx]
     var.long_name = d.variables['hatchOpen'].long_name
@@ -159,7 +248,7 @@ def run(fn, out):
     var[:] = d.variables['qc_flag'][beg_idx:end_idx]
     var.long_name = d.variables['qc_flag'].long_name
     var.units = str(d.variables['qc_flag'].units)
-
+    """
     out.close()
 
 if __name__ == '__main__':
